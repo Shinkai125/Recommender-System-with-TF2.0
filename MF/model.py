@@ -82,12 +82,11 @@ class MF_layer(Layer):
 
 
 class MF(tf.keras.Model):
-    def __init__(self, feature_columns, implicit=False, use_bias=False, user_reg=1e-4, item_reg=1e-4,
+    def __init__(self, feature_columns, use_bias=False, user_reg=1e-4, item_reg=1e-4,
                  user_bias_reg=1e-4, item_bias_reg=1e-4):
         """
         MF Model
         :param feature_columns: dense_feature_columns + sparse_feature_columns
-        :param implicit: whether implicit or not
         :param use_bias: whether using bias or not
         :param user_reg: regularization of user
         :param item_reg: regularization of item
@@ -99,8 +98,14 @@ class MF(tf.keras.Model):
         num_users, num_items = self.sparse_feature_columns[0]['feat_num'], \
                                self.sparse_feature_columns[1]['feat_num']
         latent_dim = self.sparse_feature_columns[0]['embed_dim']
-        self.mf_layer = MF_layer(num_users, num_items, latent_dim, implicit, use_bias,
-                                 user_reg, item_reg, user_bias_reg, item_bias_reg)
+        self.mf_layer = MF_layer(user_num=num_users,
+                                 item_num=num_items,
+                                 latent_dim=latent_dim,
+                                 use_bias=use_bias,
+                                 user_reg=user_reg,
+                                 item_reg=item_reg,
+                                 user_bias_reg=user_bias_reg,
+                                 item_bias_reg=item_bias_reg)
 
     def call(self, inputs, **kwargs):
         dense_inputs, sparse_inputs = inputs
@@ -113,3 +118,40 @@ class MF(tf.keras.Model):
         dense_inputs = tf.keras.Input(shape=(len(self.dense_feature_columns),), dtype=tf.float32)
         sparse_inputs = tf.keras.Input(shape=(len(self.sparse_feature_columns),), dtype=tf.int32)
         tf.keras.Model(inputs=[dense_inputs, sparse_inputs], outputs=self.call([dense_inputs, sparse_inputs])).summary()
+
+
+def Build_MF_Model(num_users, num_items, embedding_size):
+    user_id = tf.keras.Input(shape=(1,), dtype=tf.int32, name='User_ID')
+    movie_id = tf.keras.Input(shape=(1,), dtype=tf.int32, name='Movie_ID')
+    user_avg_score = tf.keras.Input(shape=(1,), dtype=tf.float32, name='User_Avg_Score')
+    user_embedding = tf.keras.layers.Embedding(input_dim=num_users,
+                                               output_dim=embedding_size,
+                                               input_length=1,
+                                               embeddings_initializer="he_normal",
+                                               embeddings_regularizer=tf.keras.regularizers.l2(1e-6),
+                                               name="User_Embedding")(user_id)
+    user_vectors = tf.keras.layers.Flatten(name='User_Vector')(user_embedding)
+    user_bias = tf.keras.layers.Embedding(input_dim=num_users,
+                                          output_dim=1,
+                                          input_length=1,
+                                          name="User_Bias_Embedding")(user_id)
+    user_bias = tf.keras.layers.Flatten(name='User_Bias')(user_bias)
+    movie_embedding = tf.keras.layers.Embedding(input_dim=num_items,
+                                                output_dim=embedding_size,
+                                                input_length=1,
+                                                embeddings_initializer="he_normal",
+                                                embeddings_regularizer=tf.keras.regularizers.l2(1e-6),
+                                                name="Item_Embedding")(movie_id)
+    movie_vectors = tf.keras.layers.Flatten(name='Item_Vector')(movie_embedding)
+    movie_bias = tf.keras.layers.Embedding(input_dim=num_items,
+                                           output_dim=1,
+                                           input_length=1,
+                                           name="Item_Bias_Embedding")(movie_id)
+    movie_bias = tf.keras.layers.Flatten(name='Movie_Bias')(movie_bias)
+    user_item_similar = tf.keras.layers.Dot(name="User_Item_Similar", axes=1)([user_vectors, movie_vectors])
+
+    # avg_score = tf.keras.layers.Reshape((-1, 1))(user_avg_score)
+    output = tf.keras.layers.Add(name="Score")([user_item_similar, user_bias, movie_bias, user_avg_score])
+    # output = tf.keras.layers.Activation('sigmoid', name="Score")(output)
+
+    return tf.keras.Model(inputs=[user_id, movie_id, user_avg_score], outputs=[output], name="MF")

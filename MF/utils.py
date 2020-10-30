@@ -49,7 +49,7 @@ def create_explicit_ml_1m_dataset(file, latent_dim=4, test_size=0.2):
     :return: user_num, item_num, train_df, test_df
     """
     data_df = pd.read_csv(file, sep="::", engine='python',
-                     names=['UserId', 'MovieId', 'Rating', 'Timestamp'])
+                          names=['UserId', 'MovieId', 'Rating', 'Timestamp'])
     data_df['avg_score'] = data_df.groupby(by='UserId')['Rating'].transform('mean')
     # feature columns
     user_num, item_num = data_df['UserId'].max() + 1, data_df['MovieId'].max() + 1
@@ -70,6 +70,5 @@ def create_explicit_ml_1m_dataset(file, latent_dim=4, test_size=0.2):
     test_X = [test_df['avg_score'].values, test_df[['UserId', 'MovieId']].values]
     test_y = test_df['Rating'].values.astype('int32')
     return feature_columns, (train_X, train_y), (test_X, test_y)
-
 
 # create_explicit_ml_1m_dataset('../dataset/ml-1m/movies.dat')

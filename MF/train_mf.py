@@ -10,7 +10,7 @@ import warnings
 from pathlib import Path
 
 import numpy as np
-from model import MF
+from model import MF, Build_MF_Model
 from tensorflow import keras
 from tensorflow.keras.metrics import AUC
 from tensorflow.keras.optimizers import Adam
@@ -45,8 +45,15 @@ if __name__ == '__main__':
     feature_columns, train, test = create_explicit_ml_1m_dataset(file, latent_dim, test_size)
     train_X, train_y = train
     test_X, test_y = test
+
+    dense_feature_columns, sparse_feature_columns = feature_columns
+    num_users, num_items = sparse_feature_columns[0]['feat_num'], \
+                           sparse_feature_columns[1]['feat_num']
+
     # ============================Build Model==========================
-    model = MF(feature_columns, use_bias)
+    model = Build_MF_Model(num_users=num_users,
+                           num_items=num_items,
+                           embedding_size=50)
     model.summary()
     # ============================model checkpoint======================
     # check_path = '../save/mf_weights.epoch_{epoch:04d}.val_loss_{val_loss:.4f}.ckpt'
@@ -54,10 +61,14 @@ if __name__ == '__main__':
     #                                                 verbose=1, period=5)
     # ============================Compile============================
     model.compile(loss='mse', optimizer=Adam(learning_rate=learning_rate),
-                  metrics=['mse', AUC()])
+                  metrics=['mse'])
     # ==============================Fit==============================
+    dense_inputs, sparse_inputs = train_X
+    user_id, item_id = sparse_inputs[:, 0], sparse_inputs[:, 1]
+    avg_score = dense_inputs
+
     model.fit(
-        train_X,
+        [user_id, item_id, avg_score],
         train_y,
         epochs=epochs,
         # callbacks=[checkpoint],
@@ -65,4 +76,7 @@ if __name__ == '__main__':
         validation_split=0.1
     )
     # ===========================Test==============================
-    print('test rmse: %f' % np.sqrt(model.evaluate(test_X, test_y)[1]))
+    dense_inputs, sparse_inputs = test_X
+    user_id, item_id = sparse_inputs[:, 0], sparse_inputs[:, 1]
+    avg_score = dense_inputs
+    print('test rmse: %f' % np.sqrt(model.evaluate([user_id, item_id, avg_score], test_y)[1]))
